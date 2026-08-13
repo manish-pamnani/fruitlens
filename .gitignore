@@ -39,3 +39,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# next --experimental-https self-signed cert
+/certificates/
+
+# serwist (generated service worker)
+/public/sw.js
+/public/sw.js.map
+/public/swe-worker*.js
+/public/swe-worker*.js.map

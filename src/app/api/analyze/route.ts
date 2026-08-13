@@ -56,7 +56,12 @@ export async function POST(request: Request) {
       body: JSON.stringify({
         model: MODEL,
         prompt:
-          "Identify what is shown in this photo. If it is a fruit, assess whether it looks fresh based on visible cues like color, texture, spots, bruising, or mold. Respond with a JSON object matching the given schema.",
+          `
+          Identify what is shown in this photo. 
+          If it is a fruit, assess whether it looks fresh based on visible cues like color, texture, spots, bruising, or mold and also specify the species of the fruit, for example if the fruit is an mango then mention what kind of mango it is i.e. 'Alphonso', 'Kesar', 'Dashehari', etc. Do this for every kind of fruit you find.
+          If it's not a fruit then reply with 'unknown', don't be confidently wrong about anything as eating wrong or unripe fruit can cause severe consequences;
+          Respond with a JSON object matching the given schema.
+          `,
         images: [base64],
         format: RESULT_SCHEMA,
         stream: false,

@@ -1,16 +1,16 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 
-interface CameraFeedProps {
-  onFrame?: (video: HTMLVideoElement) => void;
-  frameIntervalMs?: number;
+export interface CameraFeedHandle {
+  // Captures the current frame as a downscaled JPEG data URL, or null if
+  // the camera isn't ready yet.
+  captureFrame: () => string | null;
 }
 
-export default function CameraFeed({
-  onFrame,
-  frameIntervalMs = 200,
-}: CameraFeedProps) {
+const MAX_CAPTURE_DIMENSION = 768;
+
+const CameraFeed = forwardRef<CameraFeedHandle>(function CameraFeed(_props, ref) {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
@@ -20,7 +20,6 @@ export default function CameraFeed({
     // stomping on the second mount's stream (which was aborting play()).
     let cancelled = false;
     let activeStream: MediaStream | null = null;
-    let intervalId: ReturnType<typeof setInterval> | null = null;
 
     async function start() {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -44,11 +43,6 @@ export default function CameraFeed({
         if (err instanceof DOMException && err.name === "AbortError") return;
         throw err;
       }
-
-      if (cancelled) return;
-      if (onFrame) {
-        intervalId = setInterval(() => onFrame(video), frameIntervalMs);
-      }
     }
 
     start().catch((err) => {
@@ -57,10 +51,29 @@ export default function CameraFeed({
 
     return () => {
       cancelled = true;
-      if (intervalId) clearInterval(intervalId);
       activeStream?.getTracks().forEach((track) => track.stop());
     };
-  }, [onFrame, frameIntervalMs]);
+  }, []);
+
+  useImperativeHandle(ref, () => ({
+    captureFrame: () => {
+      const video = videoRef.current;
+      if (!video || video.videoWidth === 0) return null;
+
+      const scale = Math.min(
+        1,
+        MAX_CAPTURE_DIMENSION / Math.max(video.videoWidth, video.videoHeight),
+      );
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(video.videoWidth * scale);
+      canvas.height = Math.round(video.videoHeight * scale);
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return null;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL("image/jpeg", 0.8);
+    },
+  }));
 
   return (
     <video
@@ -70,4 +83,6 @@ export default function CameraFeed({
       className="h-full w-full object-cover"
     />
   );
-}
+});
+
+export default CameraFeed;

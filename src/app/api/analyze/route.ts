@@ -2,34 +2,21 @@ import { NextResponse } from "next/server";
 import type { AnalysisResult } from "@/lib/analysis";
 
 const OLLAMA_HOST = process.env.OLLAMA_HOST ?? "http://localhost:11434";
-const MODEL = "moondream:v2";
+const MODEL = "qwen2.5vl:7b";
 
-const RESULT_SCHEMA = {
-  type: "object",
-  properties: {
-    label: {
-      type: "string",
-      description: "Common name of what's shown, e.g. 'Banana', 'Corn', 'Plate'.",
-    },
-    isFruit: {
-      type: "boolean",
-      description:
-        "True only if the object is a fruit — not a vegetable, grain, or unrelated object.",
-    },
-    freshness: {
-      type: "string",
-      enum: ["fresh", "not_fresh", "unknown"],
-      description:
-        "Only meaningful when isFruit is true. Use 'unknown' when isFruit is false or freshness can't be judged from the image.",
-    },
-    explanation: {
-      type: "string",
-      description:
-        "One short sentence on the identification and, if a fruit, the freshness cues observed.",
-    },
-  },
-  required: ["label", "isFruit", "freshness", "explanation"],
-} as const;
+// Forcing a strict field-by-field JSON schema (Ollama's grammar-constrained
+// "format") measurably hurt this small model's accuracy — e.g. it called a
+// real mango "not a fruit" under the strict schema, but correctly identified
+// it (variety included) once allowed to reason before answering. Loose
+// `format: "json"` (valid-JSON-only, no field grammar) plus an explicit
+// "think it through" prompt fixed it.
+const PROMPT = `Look at this photo and think through what it shows: what object is it, and if it is a fruit, what species/variety, and how ripe or fresh does it look based on color, texture, spots, bruising, or mold. Do not be confidently wrong about ripeness, since eating an unripe or spoiled fruit can cause real harm.
+
+Respond with a JSON object with these exact keys:
+- label (string): common name, and variety if identifiable (e.g. "Alphonso Mango")
+- isFruit (boolean): true only if it is a fruit, not a vegetable, grain, or unrelated object
+- freshness (one of "fresh", "not_fresh", "unknown"): only meaningful when isFruit is true
+- explanation (string): one or two sentences on your reasoning`;
 
 function parseDataUrl(dataUrl: string): string | null {
   const match = /^data:image\/(?:jpeg|png|webp);base64,(.+)$/.exec(dataUrl);
@@ -55,15 +42,9 @@ export async function POST(request: Request) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         model: MODEL,
-        prompt:
-          `
-          Identify what is shown in this photo. 
-          If it is a fruit, assess whether it looks fresh based on visible cues like color, texture, spots, bruising, or mold and also specify the species of the fruit, for example if the fruit is an mango then mention what kind of mango it is i.e. 'Alphonso', 'Kesar', 'Dashehari', etc. Do this for every kind of fruit you find.
-          If it's not a fruit then reply with 'unknown', don't be confidently wrong about anything as eating wrong or unripe fruit can cause severe consequences;
-          Respond with a JSON object matching the given schema.
-          `,
+        prompt: PROMPT,
         images: [base64],
-        format: RESULT_SCHEMA,
+        format: "json",
         stream: false,
       }),
     });
